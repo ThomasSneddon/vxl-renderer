@@ -53,6 +53,10 @@ namespace shot
 	size_t directions = 8;
 	std::string output_dir = "output";
 	std::string filename;
+	bool generate_ingame_like_previews = false;
+	std::string bgfilename = "background.png";
+	size_t celloffsetx = 6;
+	size_t celloffsety = 6;
 }
 
 namespace assets
@@ -76,6 +80,15 @@ void disable_console()
 	fclose(stdout);
 	fclose(stdin);
 	FreeConsole();
+}
+
+std::filesystem::path get_exe_path()
+{
+	std::wstring path_buffer;
+	path_buffer.resize(65536);
+
+	GetModuleFileName(NULL, path_buffer.data(), 65536);
+	return std::filesystem::path(path_buffer).remove_filename();
 }
 
 void screen_shot(const std::string& filename, const std::string& path)
@@ -132,6 +145,162 @@ void screen_shot(const std::string& filename, const std::string& path)
 				target.replace_extension(".PNG");
 				stbi_write_png(target.string().c_str(), 256, 256, 4, front_buffer.data(), 0);
 			}
+		}
+	}
+
+	if (shot::generate_ingame_like_previews)
+	{
+		constexpr const size_t bgchannels = 4u;
+		constexpr const size_t cell_width = 60u;
+		constexpr const size_t cell_height = 30u;
+
+		const size_t bgwidth = 256u + cell_width * shot::celloffsetx * 2u;
+		const size_t bgheight = 256u + cell_height * shot::celloffsety * 2u;
+		std::unique_ptr<byte> output_buffer(new byte[bgwidth * bgheight * bgchannels]);
+		const size_t outputbuffer_pitch = bgwidth * bgchannels;
+
+		directions = 8u;
+		angle_step = DirectX::g_XMTwoPi.f[0] / directions;
+		starting_angle = DirectX::g_XMNegativePi.f[0]; //lefttop
+
+		auto tempworld = renderer.get_world();
+		auto tempscale = renderer.get_scale_factor();
+		auto tempbgcolor = renderer.get_bg_color();
+
+		const size_t frames[] = { 0,0,0 };
+		const float rotations[] = { 0.0f,0.0f,0.0f };
+
+		renderer.reload_hva(hvas, frames, rotations, _countof(hvas));
+		renderer.set_scale_factor({ 1.0f,1.0f,1.0f,1.0f });
+		renderer.set_bg_color({ 0.0f,0.0f,1.0f,0.0f });
+
+		std::vector<std::vector<byte>> render_result_storage;
+		std::vector<std::vector<byte>> shadow_result_storage;
+		auto rotation_matrix = DirectX::XMMatrixIdentity();
+		auto shadow_matrix = DirectX::XMMatrixScaling(1.0f, 1.0f, 0.0f);
+		for (size_t i = 0; i < directions; i++)
+		{
+			rotation_matrix = DirectX::XMMatrixRotationZ(starting_angle + angle_step * i);
+			renderer.set_world(rotation_matrix);
+			renderer.clear_vxl_canvas();
+			renderer.render_loaded_vxl();
+			render_result_storage.push_back(renderer.render_target_data());
+			renderer.set_world(rotation_matrix * shadow_matrix);
+			renderer.clear_vxl_canvas();
+			renderer.render_loaded_vxl();
+			shadow_result_storage.push_back(renderer.render_target_data());
+
+		}
+
+		renderer.set_world(tempworld);
+		renderer.set_scale_factor(tempscale);
+		renderer.set_bg_color(tempbgcolor);
+
+		const auto check_function = [](const std::vector<byte>& target_data)->bool {
+			return target_data.empty();
+		};
+
+		auto invalid = std::find_if(render_result_storage.begin(), render_result_storage.end(), check_function);
+		auto invalid_shadow = std::find_if(shadow_result_storage.begin(), shadow_result_storage.end(), check_function);
+		//write render result to target
+		if (invalid == render_result_storage.end() && invalid_shadow == shadow_result_storage.end() && output_buffer && render_result_storage.size() == directions && shadow_result_storage.size() == directions)//valid
+		{
+			std::filesystem::path bgfile = get_exe_path() / shot::bgfilename;
+			auto filebuffer = read_whole_file(bgfile.string());
+
+			//clear image
+			memset(output_buffer.get(), 0, bgwidth * bgheight * bgchannels);
+			//write bg image
+			if (filebuffer.get())
+			{
+				int output_width = 0, output_height = 0, output_channels = 0;
+				auto filesize = std::filesystem::file_size(bgfile);
+				const auto bgimage_data = stbi_load_from_memory(reinterpret_cast<byte*>(filebuffer.get()), filesize, &output_width, &output_height, &output_channels, STBI_rgb_alpha);
+				
+				//blit the image to the center
+				if (bgimage_data)
+				{
+					const POINT image_pos = { ((int)bgwidth - (int)output_width) / 2,((int)bgheight - (int)output_height) / 2 };
+					RECT surface_rect = { 0,0,bgwidth,bgheight };
+					RECT image_rect = { image_pos.x,image_pos.y,image_pos.x + output_width,image_pos.y + output_height };
+					RECT intersected = {};
+					IntersectRect(&intersected, &image_rect, &surface_rect);
+
+					const size_t image_startx = intersected.left - image_pos.x;
+					const size_t image_starty = intersected.top - image_pos.y;
+					const size_t surface_startx = intersected.left;
+					const size_t surface_starty = intersected.top;
+					const size_t blit_width = intersected.right - intersected.left;
+					const size_t blit_height = intersected.bottom - intersected.top;
+					const size_t src_pitch = output_width * 4u;
+
+					for (size_t y = 0; y < blit_height; y++)
+					{
+						for (size_t x = 0; x < blit_width; x++)
+						{
+							size_t surface_cur = (surface_starty + y) * outputbuffer_pitch + (surface_startx + x) * bgchannels;
+							size_t image_buff_cur = (image_starty + y) * src_pitch + (image_startx + x) * 4u;
+
+							*reinterpret_cast<RGBQUAD*>(&output_buffer.get()[surface_cur]) = *reinterpret_cast<RGBQUAD*>(&bgimage_data[image_buff_cur]);
+						}
+					}
+				}
+
+				if (bgimage_data)
+					stbi_image_free(bgimage_data);
+			}
+
+			//write render result
+			static const size_t index_to_direction[] = { 1u,0u,2u,7u,3u,5u,6u,4u };
+			static const size_t direction_to_block[] = { 0u,1u,2u,5u,8u,7u,6u,3u };
+			for (size_t index = 0; index < directions; index++)
+			{
+				const size_t dir = index_to_direction[index];
+				const size_t block_idx = direction_to_block[dir];
+
+				const size_t block_y = block_idx / 3;
+				const size_t block_x = block_idx - block_y * 3;
+
+				const size_t start_x = block_x * shot::celloffsetx * cell_width;
+				const size_t start_y = block_y * shot::celloffsety * cell_height;
+
+				auto& result = render_result_storage[dir];
+				auto& shadow = shadow_result_storage[dir];
+				const size_t src_pitch = 256u * 4u;
+				for (size_t y = 0; y < 256u; y++)
+				{
+					for (size_t x = 0; x < 256u; x++)
+					{
+						size_t src_location = y * src_pitch + x * 4u;
+						size_t dst_location = (start_y + y) * outputbuffer_pitch + (start_x + x) * bgchannels;
+						
+						if (shadow[src_location + 3u])
+						{
+							auto& color = *reinterpret_cast<RGBQUAD*>(&output_buffer.get()[dst_location]);
+							if (output_buffer.get()[dst_location + 3u])
+							{
+								color.rgbRed >>= 1u;
+								color.rgbGreen >>= 1u;
+								color.rgbBlue >>= 1u;
+							}
+							else
+							{
+								color = { 0u,0u,0u,127u };
+							}
+						}
+							
+						if (result[src_location + 3u])
+						{
+							*reinterpret_cast<RGBQUAD*>(&output_buffer.get()[dst_location]) = *reinterpret_cast<RGBQUAD*>(&result[src_location]);
+						}
+					}
+				}
+
+			}
+
+			target.replace_filename("Preview");
+			target.replace_extension("png");
+			stbi_write_png(target.string().c_str(), bgwidth, bgheight, bgchannels, output_buffer.get(), 0);
 		}
 	}
 }
@@ -337,11 +506,7 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 #endif
 	logger::initialize();
 
-	std::wstring path_buffer;
-	path_buffer.resize(65536);
-
-	GetModuleFileName(NULL, path_buffer.data(), 65536);
-	std::filesystem::path current_dir = std::filesystem::path(path_buffer).remove_filename();
+	std::filesystem::path current_dir = get_exe_path();
 	assets::vpl.load((current_dir / "voxels.vpl").string());
 	assets::pal.load((current_dir / "unittem.pal").string());
 	assets::ini.load((current_dir / "settings.ini").string());
@@ -477,10 +642,22 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 			}
 
 			const auto setting = "Settings";
-			auto dir_values = assets::ini.value_as_strings(setting, "ScreenshotOutputDir");
-			auto directions = assets::ini.value_as_int(setting, "DirectionCount");
-			shot::output_dir = dir_values.empty() ? shot::output_dir : dir_values[0];
-			shot::directions = directions.empty() ? shot::directions : directions[0];
+			shot::output_dir = assets::ini.read_string(setting, "ScreenshotOutputDir", shot::output_dir);
+			shot::directions = assets::ini.read_int(setting, "DirectionCount", shot::directions);
+			shot::bgfilename = assets::ini.read_string(setting, "BackgroundFileName", shot::bgfilename);
+			shot::celloffsetx = static_cast<size_t>(std::abs(assets::ini.read_int(setting, "CellOffsetX", shot::celloffsetx)));
+			shot::celloffsety = static_cast<size_t>(std::abs(assets::ini.read_int(setting, "CellOffsetY", shot::celloffsety)));
+
+			DirectX::XMVECTOR setting_color = { 0.0f,0.0f,1.0f,1.0f };
+			auto bgcolor = assets::ini.value_as_int(setting, "BackgroundColor");
+			if (bgcolor.size() >= 4)
+			{
+				for (size_t i = 0; i < 4; i++)
+					setting_color.vector4_f32[i] = static_cast<float>(std::clamp(bgcolor[i], 0, 255)) / 255.0f;
+				test_window::renderer2.set_bg_color(setting_color);
+			}
+
+			shot::generate_ingame_like_previews = assets::ini.read_bool(setting, "GenerateIngameViews", shot::generate_ingame_like_previews);
 		}
 
 		UpdateWindow(color_sel);

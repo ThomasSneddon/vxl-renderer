@@ -36,6 +36,7 @@ cbuffer state_data : register(b7)
     float4 _light;
     float4 remap;
     float4 scale_factor;
+    float4 bgcolor;
 }
 
 float3 vxl_projection(float3 model_pos)

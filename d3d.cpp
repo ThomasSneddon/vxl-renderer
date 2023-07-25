@@ -928,8 +928,7 @@ bool vpl_renderer::present()
 				CD3DX12_CPU_DESCRIPTOR_HANDLE(_render_target_views->GetCPUDescriptorHandleForHeapStart(), buffer_idx, rtv_increment);
 			command_list->OMSetRenderTargets(1, &target, false, nullptr);
 
-			const float color_clear[] = { 0.0f,0.0f,0.0f,1.0f };
-			command_list->ClearRenderTargetView(target, color_clear, 0, nullptr);
+			command_list->ClearRenderTargetView(target, _states.bgcolor.vector4_f32, 0, nullptr);
 
 			//prepare input assembly
 			D3D12_VERTEX_BUFFER_VIEW vtb_view = {};
@@ -1302,8 +1301,7 @@ bool vpl_renderer::render_loaded_vxl()
 
 	if (_box_rendered && begin_command())
 	{
-		const float color_clear[] = { 0.0f,0.0f,1.0f,1.0f };
-		commands->ClearRenderTargetView(target, color_clear, 0, nullptr);
+		commands->ClearRenderTargetView(target, _states.bgcolor.vector4_f32, 0, nullptr);
 		commands->ClearDepthStencilView(depth, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 		execute_commands();
 		wait_for_completion();
@@ -1382,7 +1380,7 @@ bool vpl_renderer::render_loaded_vxl()
 			commands->SetPipelineState(_box_pso.get());
 
 			//const float color_clear[] = { 0.0f,0.0f,1.0f,1.0f };
-			//commands->ClearRenderTargetView(target, color_clear, 0, nullptr);
+			//commands->ClearRenderTargetView(target, _states.bgcolor.vector4_f32, 0, nullptr);
 			//commands->ClearDepthStencilView(depth, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
 			D3D12_VIEWPORT viewport = { 0,0,256.0f,256.0f,0.0f,1.0f };
@@ -1584,6 +1582,11 @@ void vpl_renderer::set_world(const DirectX::XMMATRIX& world)
 	_states.world = world;
 }
 
+void vpl_renderer::set_bg_color(const DirectX::XMVECTOR& color)
+{
+	_states.bgcolor = color;
+}
+
 void vpl_renderer::set_remap(const color& color)
 {
 	_states.remap_color = { static_cast<float>(color.r),static_cast<float>(color.g), static_cast<float>(color.b),1.0f };
@@ -1604,9 +1607,19 @@ DirectX::XMMATRIX vpl_renderer::get_world() const
 	return _states.world;
 }
 
-renderer_state_data::renderer_state_data()
+DirectX::XMVECTOR vpl_renderer::get_scale_factor() const
 {
-	world = DirectX::XMMatrixIdentity();
+	return _states.scale;
+}
+
+DirectX::XMVECTOR vpl_renderer::get_bg_color() const
+{
+	return _states.bgcolor;
+}
+
+DirectX::XMVECTOR vpl_renderer::get_remap() const
+{
+	return _states.remap_color;
 }
 
 void d3d12_swapchain::discard()

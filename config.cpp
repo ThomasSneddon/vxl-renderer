@@ -145,7 +145,7 @@ bool config::read_bool(const std::string& section, const std::string& key, bool 
 std::string config::read_string(const std::string& section, const std::string& key, std::string def)
 {
     value_type values = value(section, key);
-    if (values.empty())
+    if (values.empty() || values.front().empty())
         return def;
     return values.front();
 }

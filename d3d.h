@@ -133,12 +133,11 @@ protected:
 
 struct renderer_state_data
 {
-	renderer_state_data();
-
 	DirectX::XMMATRIX world{ DirectX::XMMatrixIdentity() };
 	DirectX::XMVECTOR light_direction{ 0.2013022f,0.9101138f,-0.3621709f,0.0f };
 	DirectX::XMVECTOR remap_color{ 252.0f,0.0f,0.0f,1.0f };
 	DirectX::XMVECTOR scale{ 1.0f,1.0f,1.0f,1.0f };
+	DirectX::XMVECTOR bgcolor{ 0.0f,0.0f,1.0f,0.0f };
 };
 
 struct vxl_buffer_decl
@@ -221,10 +220,14 @@ public:
 	void set_light_dir(const DirectX::XMVECTOR& dir);
 	void set_scale_factor(const DirectX::XMVECTOR& scale);
 	void set_world(const DirectX::XMMATRIX& world);
+	void set_bg_color(const DirectX::XMVECTOR& color);
 	void set_remap(const struct color& color);
 	bool hardware_processing()const;
 	DirectX::XMVECTOR get_light_dir() const;
 	DirectX::XMMATRIX get_world() const;
+	DirectX::XMVECTOR get_scale_factor() const;
+	DirectX::XMVECTOR get_bg_color() const;
+	DirectX::XMVECTOR get_remap() const;
 	std::vector<byte> front_buffer_data();
 	std::vector<byte> render_target_data();
 
