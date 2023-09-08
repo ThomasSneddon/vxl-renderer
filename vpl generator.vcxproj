@@ -186,7 +186,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>%(PreprocessorDefinitions);_CONSOLE;_XM_NO_INTRINSICS_;_CRT_SECURE_NO_WARNINGS;NOMINMAX;VXL_BYTE_TRANSFER;_DEBUG</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CONSOLE;_XM_NO_INTRINSICS_;_CRT_SECURE_NO_WARNINGS;NOMINMAX;VXL_BYTE_TRANSFER;%(PreprocessorDefinitions);_DEBUG</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
