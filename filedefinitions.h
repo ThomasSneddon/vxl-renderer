@@ -51,6 +51,9 @@ public:
 	virtual file_type type() const = 0;
 };
 
+
+std::filesystem::path get_exe_path();
+
 std::shared_ptr<char> read_whole_file(const std::string& filename);
 /*
 {

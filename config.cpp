@@ -49,7 +49,7 @@ bool config::load(const std::string& filename)
     return is_loaded();
 }
 
-bool config::is_loaded()
+bool config::is_loaded() const
 {
     return !_config.empty();
 }

@@ -2,6 +2,7 @@
 
 #include "filedefinitions.h"
 
+//read only config
 class config
 {
 public:
@@ -15,7 +16,7 @@ public:
 
 	//
 	bool load(const std::string& filename);
-	bool is_loaded();
+	bool is_loaded() const;
 	void clear();
 
 	//

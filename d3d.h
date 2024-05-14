@@ -134,10 +134,11 @@ protected:
 struct renderer_state_data
 {
 	DirectX::XMMATRIX world{ DirectX::XMMatrixIdentity() };
-	DirectX::XMVECTOR light_direction{ 0.2013022f,0.9101138f,-0.3621709f,0.0f };
+	DirectX::XMVECTOR light_direction{ 0.2013022f,-0.9101138f,-0.3621709f,0.0f };
 	DirectX::XMVECTOR remap_color{ 252.0f,0.0f,0.0f,1.0f };
 	DirectX::XMVECTOR scale{ 1.0f,1.0f,1.0f,1.0f };
 	DirectX::XMVECTOR bgcolor{ 0.0f,0.0f,1.0f,0.0f };
+	DirectX::XMVECTOR canvas_dimension{ 256.0f,256.0f,0.0f,0.0f };
 };
 
 struct vxl_buffer_decl
@@ -200,7 +201,7 @@ public:
 	void clear_renderer();
 	//bool change_vxl_dimension(uint32_t x, uint32_t y, uint32_t z);
 	bool load_vxl(const class vxl& vxl, const class hva& hva, const size_t frame, const bool clear = false);
-	bool reload_hva(const class hva* hva[], const size_t frame[], const float prerotation[], const size_t numhvas);
+	bool reload_hva(const class hva* hva[], const size_t frame[], const float prerotation[], const float offsets[], const size_t numhvas);
 	bool load_vpl(const class vpl& vpl);
 	bool load_pal(const class palette& pal);
 	void clear_vxl_resources();
@@ -208,12 +209,17 @@ public:
 	bool valid() const;
 
 	bool begin_command();
+
+	//fence must have been raised before calling this methods
 	bool wait_for_completion();
+	bool wait_for_sync();
 	void execute_commands();
 	bool transition_state(ID3D12Resource* resource, const D3D12_RESOURCE_STATES from, const D3D12_RESOURCE_STATES to);
 	bool vxl_resource_initiated() const;
 	bool bind_resource_table(const int resource_idx);
 	bool render_loaded_vxl();
+	
+	bool render_gui(const bool clear_target = false);
 	bool present_resource_initiated() const;
 	bool present();
 	bool clear_vxl_canvas();
@@ -223,6 +229,10 @@ public:
 	void set_bg_color(const DirectX::XMVECTOR& color);
 	void set_remap(const struct color& color);
 	bool hardware_processing()const;
+	size_t width() const;
+	size_t height() const;
+	bool resize_buffers();
+
 	DirectX::XMVECTOR get_light_dir() const;
 	DirectX::XMMATRIX get_world() const;
 	DirectX::XMVECTOR get_scale_factor() const;
@@ -257,5 +267,8 @@ private:
 	bool _renderer_resource_dirty = { false };
 	bool _box_rendered = { false };
 	bool _hardware_processing = { false };
+
+	//IMGUI STUFF
+	com_ptr<ID3D12DescriptorHeap> _gui_descriptor_heaps;
 };
 

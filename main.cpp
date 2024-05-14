@@ -434,7 +434,7 @@ LRESULT __stdcall wnd_proc(HWND window, UINT msg, WPARAM wparam, LPARAM lparam)
 			changed = true;
 			return 0;
 		}
-	}
+	}/*
 	else if (msg == WM_COMMAND)
 	{
 		if (window == test_window::mainwin && HIWORD(wparam) == BN_CLICKED)
@@ -455,7 +455,7 @@ LRESULT __stdcall wnd_proc(HWND window, UINT msg, WPARAM wparam, LPARAM lparam)
 				screen_shot(shot::filename, shot::output_dir);
 			}
 		}
-	}
+	}*/
 	else if (msg == WM_CLOSE)
 	{
 		test_window::renderer2.clear_renderer();

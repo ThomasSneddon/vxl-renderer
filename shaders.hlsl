@@ -37,18 +37,20 @@ cbuffer state_data : register(b7)
     float4 remap;
     float4 scale_factor;
     float4 bgcolor;
+    float2 canvas_dimension;
 }
 
 float3 vxl_projection(float3 model_pos)
 {
-    const float w = 256.0f;
-    const float h = 256.0f;
+    //const float w = 256.0f;
+    //const float h = 256.0f;
     const float f = 5000.0f;
     
     float3 result = 0.0f.xxx;
     
-    result.x = w / 2.0 + (model_pos.x - model_pos.y) / sqrt(2.0);
-    result.y = h / 2.0 + (model_pos.x + model_pos.y) / sqrt(8.0) - model_pos.z * sqrt(3.0) / 2.0;
+    model_pos.xy *= float2(1.0f, -1.0f);
+    result.x = canvas_dimension.x / 2.0 + (model_pos.x - model_pos.y) / sqrt(2.0);
+    result.y = canvas_dimension.y / 2.0 + (model_pos.x + model_pos.y) / sqrt(8.0) - model_pos.z * sqrt(3.0) / 2.0;
     result.z = sqrt(3.0) / 2.0 / f * (4000.0 * sqrt(2.0) / 3.0 - (model_pos.x + model_pos.y) / sqrt(2.0) - model_pos.z / sqrt(3.0));
     
     return result;
@@ -113,7 +115,7 @@ void main(uint3 DTid : SV_DispatchThreadID)
     voxel.z = vxl_data[uint2(xoffset + 4, row)];
     
     float4 modelspace_pos = float4(voxel.x, voxel.y, voxel.z, 1.0f);
-    float4 modelspace_nrm = float4(normal_table[voxel.normal].xyz, 0.0f) * float4(1.0f, -1.0f, 1.0f, 1.0f);
+    float4 modelspace_nrm = float4(normal_table[voxel.normal].xyz, 0.0f);// * float4(1.0f, -1.0f, 1.0f, 1.0f);
     float4 voxel_pos = mul(modelspace_pos, transformation_matrix);
     float3 n = normalize(mul(modelspace_nrm, transformation_matrix).xyz);
     float3 proj_voxel_pos = vxl_projection(voxel_pos.xyz);
@@ -153,7 +155,7 @@ vs_output vmain(float3 pos : POSITION, float2 uv : TEXCOORD)
 
 float4 pmain(vs_output input) : SV_Target
 {
-    uint2 pix_coord = input.uv * 256.0f.xx;
+    uint2 pix_coord = input.uv * canvas_dimension;
     uint color_idx = render_target[pix_coord].x;
     uint color_offset = color_idx * 3;
     float3 color = float3(pal_data[color_offset], pal_data[color_offset + 1], pal_data[color_offset + 2]);
@@ -195,7 +197,7 @@ box_vert_output box_vmain(float4 position : POSITION, uint instance_id : SV_Inst
     float4 modelspace_pos = float4(voxel.x, voxel.y, voxel.z, 1.0f);
     modelspace_pos.xyz += position.xyz;
     
-    float4 modelspace_nrm = float4(normal_table[voxel.normal].xyz, 0.0f) * float4(1.0f, -1.0f, 1.0f, 1.0f);
+    float4 modelspace_nrm = float4(normal_table[voxel.normal].xyz, 0.0f);// * float4(1.0f, -1.0f, 1.0f, 1.0f);
     float4 voxel_pos = mul(modelspace_pos, transformation_matrix);
     voxel_pos.xyz *= scale_factor.xyz;
     
@@ -230,7 +232,7 @@ box_vert_output box_vmain(float4 position : POSITION, uint instance_id : SV_Inst
         real_color = float4(color / 255.0f, 1.0f);
     }
     
-    proj_voxel_pos.xy /= 256.0f / 2.0f;
+    proj_voxel_pos.xy /= canvas_dimension / 2.0f;
     proj_voxel_pos.xy -= 1.0f.xx;
     proj_voxel_pos.y *= -1.0f;
     proj_voxel_pos.z += 0.5f;

@@ -6,6 +6,8 @@
 #include "resource.h"
 
 #include <d3dcompiler.h>
+#include "backends/imgui_impl_win32.h"
+#include "backends/imgui_impl_dx12.h"
 
 inline uint32_t resource_pitch(const uint32_t data_pitch)
 {
@@ -118,11 +120,15 @@ bool d3d12_resource_set::add_empty_resource(com_ptr<ID3D12Device> device, const 
 	D3D12_HEAP_PROPERTIES pool_properties = CD3DX12_HEAP_PROPERTIES(heap);
 	D3D12_CLEAR_VALUE clear_value = { format,{0.0f,0.0f,1.0f,1.0f} };
 
-	if (res_desc.Flags == D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)
+	if (res_desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)
 		clear_value.DepthStencil = { 1.0f,0 };
 
 	if (FAILED(device->CreateCommittedResource(&pool_properties, D3D12_HEAP_FLAG_NONE,
-		&res_desc, initial_state, nullptr, IID_PPV_ARGS(&resource))))
+		&res_desc, initial_state,
+		dimension == D3D12_RESOURCE_DIMENSION_BUFFER ||
+		!((res_desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL) ||
+		(res_desc.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET))
+		? nullptr : &clear_value, IID_PPV_ARGS(&resource))))
 	{
 		return false;
 	}
@@ -310,7 +316,7 @@ bool vpl_renderer::initialize(HWND output)
 	UINT dxgiFactoryFlags = NULL;
 	bool hardware_processing = false;
 
-#ifdef _DEBUG
+//#ifdef _DEBUG
 	{
 		com_ptr<ID3D12Debug> debug_control;
 		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug_control)))) {
@@ -319,7 +325,7 @@ bool vpl_renderer::initialize(HWND output)
 			dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 		}
 	}
-#endif
+//#endif
 
 	if (FAILED(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory)))) {
 		LOG(ERROR) << "Factory creation.\n";
@@ -365,8 +371,8 @@ bool vpl_renderer::initialize(HWND output)
 		return false;
 	}
 
-	D3D12_DESCRIPTOR_HEAP_DESC resource_heap = {}, render_target_view = {}, depth_stencil_view = {};
-	com_ptr<ID3D12DescriptorHeap> resources_views, render_target_views, depth_stencil_views;
+	D3D12_DESCRIPTOR_HEAP_DESC resource_heap = {}, render_target_view = {}, depth_stencil_view = {}, gui_resource_view = {};
+	com_ptr<ID3D12DescriptorHeap> resources_views, render_target_views, depth_stencil_views, gui_resource_views;
 	resource_heap.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 	resource_heap.NumDescriptors = 1000;
 	resource_heap.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
@@ -377,6 +383,9 @@ bool vpl_renderer::initialize(HWND output)
 	depth_stencil_view.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
 	depth_stencil_view.NumDescriptors = 1;
 	depth_stencil_view.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	gui_resource_view.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	gui_resource_view.NumDescriptors = 1;
+	gui_resource_view.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 
 	if (FAILED(device->CreateDescriptorHeap(&resource_heap, IID_PPV_ARGS(&resources_views))))
 	{
@@ -396,18 +405,23 @@ bool vpl_renderer::initialize(HWND output)
 		return false;
 	}
 
+	if (FAILED(device->CreateDescriptorHeap(&gui_resource_view, IID_PPV_ARGS(&gui_resource_views))))
+	{
+		LOG(ERROR) << "GUI resource heap creation.\n";
+	}
+
 	d3d12_command_list resource_commands = {};
 	d3d12_swapchain swapchain = {};
 	d3d12_resource_set vxl_resources = {}, hva_resources = {}, upload_heaps = {}, resource_for_calculation = {}, vertex_buffers = {}, pix_const_buffer = {}, depth_stencil_buffer = {};
 	d3d12_fence general_fence = {};
 	if (!resource_commands.initialize(device, D3D12_COMMAND_LIST_TYPE_DIRECT) ||
 		!swapchain.initialize(command_queue,factory,output) ||
-		!vxl_resources.add_empty_resource(device, canvas_format, D3D12_RESOURCE_DIMENSION_TEXTURE2D, 256, 256, 1) ||
 		!hva_resources.add_empty_resource(device, DXGI_FORMAT_UNKNOWN, D3D12_RESOURCE_DIMENSION_BUFFER, sizeof game_normals, 1, 1, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST) ||
 		!pix_const_buffer.add_empty_resource(device,DXGI_FORMAT_UNKNOWN,D3D12_RESOURCE_DIMENSION_BUFFER,sizeof upload_scene_states,1,1,D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_SHADER_RESOURCE)||
 		!vertex_buffers.add_empty_resource(device,DXGI_FORMAT_UNKNOWN, D3D12_RESOURCE_DIMENSION_BUFFER, sizeof canvas_vertecies_data, 1, 1, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST)||
 		!vertex_buffers.add_empty_resource(device,DXGI_FORMAT_UNKNOWN, D3D12_RESOURCE_DIMENSION_BUFFER, sizeof box_vertex_data, 1, 1, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_COPY_DEST)||
-		!depth_stencil_buffer.add_empty_resource(device,DXGI_FORMAT_D24_UNORM_S8_UINT,D3D12_RESOURCE_DIMENSION_TEXTURE2D,256,256,1,D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_DEPTH_WRITE)||
+		!vxl_resources.add_empty_resource(device, canvas_format, D3D12_RESOURCE_DIMENSION_TEXTURE2D, width(), height(), 1) ||
+		!depth_stencil_buffer.add_empty_resource(device,DXGI_FORMAT_D24_UNORM_S8_UINT,D3D12_RESOURCE_DIMENSION_TEXTURE2D, width(), height(),1,D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_DEPTH_WRITE)||
 		!general_fence.initialize(device, command_queue))
 	{
 		return false;
@@ -456,18 +470,28 @@ bool vpl_renderer::initialize(HWND output)
 	}
 	
 	//prefill render target
-	float(*upload_data)[256 * 2] = nullptr;
+	float* upload_data = nullptr;
 	if (FAILED(upload_heaps.resources[clear_target_buffer_idx]->Map(0, nullptr, reinterpret_cast<void**>(&upload_data))))
 	{
 		return false;
 	}
 
-	for (size_t y = 0; y < 256; y++)
-		for (size_t x = 0; x < 256 * 2; x++)
-			upload_data[y][x] = 0.0f;
+	for (size_t y = 0; y < height(); y++)
+	{
+		for (size_t x = 0; x < width() * 2; x++)
+			upload_data[x] = 0.0f;
+		upload_data += resource_pitch(width() * 8) / sizeof(float);
+	}
 
 	upload_heaps.resources[clear_target_buffer_idx]->Unmap(0, nullptr);
 	
+	if (!ImGui_ImplDX12_Init(device.get(), 3, DXGI_FORMAT_R8G8B8A8_UNORM, gui_resource_views.get(),
+		gui_resource_views->GetCPUDescriptorHandleForHeapStart(), gui_resource_views->GetGPUDescriptorHandleForHeapStart()))
+	{
+		LOG(ERROR) << "Failed to invoke ImGui dx12 backend.\n";
+		return false;
+	}
+
 	_device = device;
 	_resource_commands = resource_commands;
 	_swapchain = swapchain;
@@ -484,6 +508,7 @@ bool vpl_renderer::initialize(HWND output)
 	_depth_stencil_resource = depth_stencil_buffer;
 	_vertex_buffer = vertex_buffers;
 	_hardware_processing = hardware_processing;
+	_gui_descriptor_heaps = gui_resource_views;
 
 	if (!init_pipeline_state())
 	{
@@ -496,7 +521,9 @@ bool vpl_renderer::initialize(HWND output)
 
 void vpl_renderer::clear_renderer()
 {
-	//wait_for_completion();
+	wait_for_sync();
+
+	ImGui_ImplDX12_Shutdown();
 
 	_resource_commands.discard();
 	_swapchain.discard();
@@ -522,6 +549,7 @@ void vpl_renderer::clear_renderer()
 	_renderer_resource_dirty = false;
 	_box_rendered = false;
 	_hardware_processing = false;
+	_gui_descriptor_heaps.reset();
 }
 //
 //bool vpl_renderer::change_vxl_dimension(uint32_t x, uint32_t y, uint32_t z)
@@ -573,7 +601,7 @@ bool vpl_renderer::load_vxl(const vxl& vxl, const hva& hva, const size_t frame, 
 						temp_decl.color = temp_vox.color;
 						temp_decl.normal = temp_vox.normal;
 						temp_decl.x = x;
-						temp_decl.y = tailer->ysize - 1 - y;
+						temp_decl.y = y;
 						temp_decl.z = z;
 						vxl_data.push_back(temp_decl);
 					}
@@ -612,7 +640,7 @@ bool vpl_renderer::load_vxl(const vxl& vxl, const hva& hva, const size_t frame, 
 			tempdata.vxl_maxbound.vector4_f32[0] = tailer->max_bounds[0];
 			tempdata.vxl_maxbound.vector4_f32[1] = tailer->max_bounds[1];
 			tempdata.vxl_maxbound.vector4_f32[2] = tailer->max_bounds[2];
-			tempdata.vxl_maxbound.vector4_f32[3] = 1.0f;
+			tempdata.vxl_maxbound.vector4_f32[3] = 0.0f;
 
 			tempdata.light_direction = _states.light_direction;
 
@@ -722,7 +750,7 @@ bool vpl_renderer::load_pal(const palette& palette)
 	return false;
 }
 
-bool vpl_renderer::reload_hva(const hva* hvas[], const size_t frames[], const float prerotation[], const size_t numhvas)
+bool vpl_renderer::reload_hva(const hva* hvas[], const size_t frames[], const float prerotation[], const float offsets[], const size_t numhvas)
 {
 	if (!valid() || !numhvas)
 		return false;
@@ -778,6 +806,9 @@ bool vpl_renderer::reload_hva(const hva* hvas[], const size_t frames[], const fl
 			tempdata.vxl_transformation.m[3][0] = matrix._data[0][3];
 			tempdata.vxl_transformation.m[3][1] = matrix._data[1][3];
 			tempdata.vxl_transformation.m[3][2] = matrix._data[2][3];
+
+			if(offsets)
+				tempdata.vxl_maxbound.vector4_f32[3] = offsets[i];
 
 			tempdata.vxl_transformation *= prerot;
 		}
@@ -898,8 +929,8 @@ bool vpl_renderer::present()
 		if (!_box_rendered)
 		{
 			com_ptr<ID3D12GraphicsCommandList>& command_list = _resource_commands.commands;
-			D3D12_VIEWPORT viewport = { 0,0,256.0f,256.0f,0.0f,1.0f };
-			D3D12_RECT scissor_rect = { 0,0,256,256 };
+			D3D12_VIEWPORT viewport = { 0,0,width(),height(),0.0f,1.0f };
+			D3D12_RECT scissor_rect = { 0,0,width(),height() };
 
 			ID3D12DescriptorHeap* heaps[] = { _resource_descriptor_heaps.get() };
 			command_list->SetPipelineState(_render_pso.get());
@@ -1234,7 +1265,8 @@ bool vpl_renderer::valid() const
 	return _resource_commands.valid() && _vxl_resource.valid() && _general_fence.valid()
 		&& _swapchain.valid() && _general_queue.get() && _pso.get() && _render_pso.get() && _box_pso.get() && _root_signature.get() &&
 		_vertex_buffer.valid() && _upload_buffers.resources.size() >= 6 &&
-		_resource_descriptor_heaps.get() && _render_target_views.get();
+		_resource_descriptor_heaps.get() && _render_target_views.get() &&
+		_gui_descriptor_heaps.get();
 }
 
 bool vpl_renderer::begin_command()
@@ -1245,6 +1277,11 @@ bool vpl_renderer::begin_command()
 bool vpl_renderer::wait_for_completion()
 {
 	return _general_fence.await_completion();
+}
+
+bool vpl_renderer::wait_for_sync()
+{
+	return _general_fence.raise_fence() && wait_for_completion();
 }
 
 void vpl_renderer::execute_commands()
@@ -1301,8 +1338,10 @@ bool vpl_renderer::render_loaded_vxl()
 
 	if (_box_rendered && begin_command())
 	{
+		transition_state(_swapchain.targets[buffer_idx].get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 		commands->ClearRenderTargetView(target, _states.bgcolor.vector4_f32, 0, nullptr);
 		commands->ClearDepthStencilView(depth, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+		transition_state(_swapchain.targets[buffer_idx].get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 		execute_commands();
 		wait_for_completion();
 	}
@@ -1312,14 +1351,15 @@ bool vpl_renderer::render_loaded_vxl()
 		//preparing hva data
 		vxl_cbuffer_data& data = final_data[i];
 		//scale & rotation & translation
-		DirectX::XMMATRIX translation_to_center = {}, scale = {}, base = data.vxl_transformation;
+		DirectX::XMMATRIX translation_to_center = {}, scale = {}, offset = {}, base = data.vxl_transformation;
 		DirectX::XMVECTOR scale_vec = (data.vxl_maxbound - data.vxl_minbound) / data.vxl_dimension;
 		translation_to_center = DirectX::XMMatrixTranslationFromVector(data.vxl_minbound);
 		scale = DirectX::XMMatrixScalingFromVector(scale_vec);
-		base.m[3][0] *= scale_vec.vector4_f32[0] * data.vxl_dimension.vector4_f32[3];
+		offset = DirectX::XMMatrixTranslation(data.vxl_maxbound.vector4_f32[3], 0.0f, 0.0f);
+		/*base.m[3][0] *= scale_vec.vector4_f32[0] * data.vxl_dimension.vector4_f32[3];
 		base.m[3][1] *= scale_vec.vector4_f32[1] * data.vxl_dimension.vector4_f32[3];
-		base.m[3][2] *= scale_vec.vector4_f32[2] * data.vxl_dimension.vector4_f32[3];
-		data.vxl_transformation = translation_to_center * scale * base * _states.world;
+		base.m[3][2] *= scale_vec.vector4_f32[2] * data.vxl_dimension.vector4_f32[3];*/
+		data.vxl_transformation = translation_to_center * scale * base * offset * _states.world;
 		data.remap_color = _states.remap_color;
 		data.light_direction = _states.light_direction;
 		
@@ -1383,8 +1423,8 @@ bool vpl_renderer::render_loaded_vxl()
 			//commands->ClearRenderTargetView(target, _states.bgcolor.vector4_f32, 0, nullptr);
 			//commands->ClearDepthStencilView(depth, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
 
-			D3D12_VIEWPORT viewport = { 0,0,256.0f,256.0f,0.0f,1.0f };
-			D3D12_RECT scissor_rect = { 0,0,256,256 };
+			D3D12_VIEWPORT viewport = { 0,0,width(),height(),0.0f,1.0f };
+			D3D12_RECT scissor_rect = { 0,0,width(),height() };
 			commands->RSSetViewports(1, &viewport);
 			commands->RSSetScissorRects(1, &scissor_rect);
 
@@ -1412,6 +1452,43 @@ bool vpl_renderer::render_loaded_vxl()
 	return true;
 }
 
+bool vpl_renderer::render_gui(const bool clear_target)
+{
+	if (!valid())
+		return false;
+
+	const com_ptr<ID3D12GraphicsCommandList>& commands = _resource_commands.commands;
+
+	if (begin_command())
+	{
+		const size_t buffer_idx = _swapchain.current_idx;
+		const size_t rtv_increment = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		D3D12_CPU_DESCRIPTOR_HANDLE target = CD3DX12_CPU_DESCRIPTOR_HANDLE(_render_target_views->GetCPUDescriptorHandleForHeapStart(), buffer_idx, rtv_increment);
+		D3D12_CPU_DESCRIPTOR_HANDLE depth = _depth_stencil_views->GetCPUDescriptorHandleForHeapStart();
+
+		ID3D12DescriptorHeap* heaps[] = { _gui_descriptor_heaps.get() };
+		commands->SetDescriptorHeaps(_countof(heaps), heaps);
+
+		transition_state(_swapchain.targets[buffer_idx].get(), D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+		if (clear_target)
+		{
+			commands->ClearRenderTargetView(target, _states.bgcolor.vector4_f32, 0, nullptr);
+			commands->ClearDepthStencilView(depth, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+		}
+
+		commands->OMSetRenderTargets(1, &target, false, &depth);
+		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commands.get());
+
+		transition_state(_swapchain.targets[buffer_idx].get(), D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+
+		execute_commands();
+		wait_for_completion();
+	}
+
+	return true;
+}
+
 bool vpl_renderer::clear_vxl_canvas()
 {
 	if (!valid())
@@ -1426,11 +1503,11 @@ bool vpl_renderer::clear_vxl_canvas()
 	D3D12_TEXTURE_COPY_LOCATION src_location = {}, dst_location = {};
 	src_location.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 	src_location.pResource = clear_data.get();
-	src_location.PlacedFootprint.Footprint.Width = 256;
-	src_location.PlacedFootprint.Footprint.Height = 256;
+	src_location.PlacedFootprint.Footprint.Width = width();
+	src_location.PlacedFootprint.Footprint.Height = height();
 	src_location.PlacedFootprint.Footprint.Depth = 1;
 	src_location.PlacedFootprint.Footprint.Format = canvas_format;
-	src_location.PlacedFootprint.Footprint.RowPitch = 256 * 8;
+	src_location.PlacedFootprint.Footprint.RowPitch = resource_pitch(width() * 8);
 
 	dst_location.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 	dst_location.pResource = canvas.get();
@@ -1457,10 +1534,10 @@ std::vector<byte> vpl_renderer::front_buffer_data()
 	const com_ptr<ID3D12Resource>& front = _vxl_resource.resources[0];
 	const com_ptr<ID3D12GraphicsCommandList>& commands = _resource_commands.commands;
 	const size_t imm_size = GetRequiredIntermediateSize(front.get(), 0, 1);
-	const size_t data_pitch = 256 * 8;
+	const size_t data_pitch = width() * 8;
 	const size_t download_pitch = resource_pitch(data_pitch);
 
-	std::vector<byte> buffer(data_pitch * 256);
+	std::vector<byte> buffer(data_pitch * height());
 	com_ptr<ID3D12Resource> read_back;
 	D3D12_HEAP_PROPERTIES read_heap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
 	D3D12_RESOURCE_DESC read_desc = CD3DX12_RESOURCE_DESC::Buffer(imm_size);
@@ -1482,8 +1559,8 @@ std::vector<byte> vpl_renderer::front_buffer_data()
 
 		D3D12_TEXTURE_COPY_LOCATION dst_location = { read_back.get() };
 		dst_location.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-		dst_location.PlacedFootprint.Footprint.Width = 256;
-		dst_location.PlacedFootprint.Footprint.Height = 256;
+		dst_location.PlacedFootprint.Footprint.Width = width();
+		dst_location.PlacedFootprint.Footprint.Height = height();
 		dst_location.PlacedFootprint.Footprint.Depth = 1;
 		dst_location.PlacedFootprint.Footprint.Format = canvas_format;
 		dst_location.PlacedFootprint.Footprint.RowPitch = download_pitch;
@@ -1497,7 +1574,7 @@ std::vector<byte> vpl_renderer::front_buffer_data()
 			byte* mapped_data = nullptr;
 			if (SUCCEEDED(read_back->Map(0, nullptr, reinterpret_cast<void**>(&mapped_data))))
 			{
-				for (size_t i = 0; i < 256; i++)
+				for (size_t i = 0; i < height(); i++)
 					memcpy_s(&buffer[i * data_pitch], data_pitch, &mapped_data[i * download_pitch], data_pitch);
 				read_back->Unmap(0, nullptr);
 				return buffer;
@@ -1517,7 +1594,7 @@ std::vector<byte> vpl_renderer::render_target_data()
 	const com_ptr<ID3D12Resource> target = _swapchain.targets[_swapchain.current_idx];
 	const com_ptr<ID3D12GraphicsCommandList>& commands = _resource_commands.commands;
 	const size_t imm_size = GetRequiredIntermediateSize(target.get(), 0, 1);
-	const size_t data_pitch = 256 * 4;
+	const size_t data_pitch = width() * 4;
 	const size_t download_pitch = resource_pitch(data_pitch);
 
 	D3D12_HEAP_PROPERTIES read_heap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
@@ -1540,8 +1617,8 @@ std::vector<byte> vpl_renderer::render_target_data()
 
 		D3D12_TEXTURE_COPY_LOCATION dst_location = { result.get() };
 		dst_location.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-		dst_location.PlacedFootprint.Footprint.Width = 256;
-		dst_location.PlacedFootprint.Footprint.Height = 256;
+		dst_location.PlacedFootprint.Footprint.Width = width();
+		dst_location.PlacedFootprint.Footprint.Height = height();
 		dst_location.PlacedFootprint.Footprint.Depth = 1;
 		dst_location.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UINT;
 		dst_location.PlacedFootprint.Footprint.RowPitch = download_pitch;
@@ -1555,8 +1632,8 @@ std::vector<byte> vpl_renderer::render_target_data()
 			byte* mapped_data = nullptr;
 			if (SUCCEEDED(result->Map(0, nullptr, reinterpret_cast<void**>(&mapped_data))))
 			{
-				buffer.resize(data_pitch * 256u);
-				for (size_t i = 0; i < 256; i++)
+				buffer.resize(data_pitch * height());
+				for (size_t i = 0; i < height(); i++)
 					memcpy_s(&buffer[i * data_pitch], data_pitch, &mapped_data[i * download_pitch], data_pitch);
 				result->Unmap(0, nullptr);
 				return buffer;
@@ -1595,6 +1672,81 @@ void vpl_renderer::set_remap(const color& color)
 bool vpl_renderer::hardware_processing() const
 {
 	return _hardware_processing;
+}
+
+size_t vpl_renderer::width() const
+{
+	return static_cast<size_t>(_states.canvas_dimension.vector4_f32[0]);
+}
+
+size_t vpl_renderer::height() const
+{
+	return static_cast<size_t>(_states.canvas_dimension.vector4_f32[1]);
+}
+
+bool vpl_renderer::resize_buffers()
+{
+	if(!valid())
+		return false;
+
+	DXGI_SWAP_CHAIN_DESC desc = {};
+	_swapchain.swapchain->GetDesc(&desc);
+
+	RECT client = {};
+	GetClientRect(desc.OutputWindow, &client);
+
+	//vxl canvas & depth_stencils
+	size_t width = client.right - client.left, height = client.bottom - client.top;
+	d3d12_resource_set canvas = {}, depth_stencils = {};
+
+	/*
+		!vxl_resources.add_empty_resource(device, canvas_format, D3D12_RESOURCE_DIMENSION_TEXTURE2D, width(), height(), 1) ||
+		!depth_stencil_buffer.add_empty_resource(device,DXGI_FORMAT_D24_UNORM_S8_UINT,D3D12_RESOURCE_DIMENSION_TEXTURE2D, width(), height(),1,D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_DEPTH_WRITE)||
+	*/
+	if (!canvas.add_empty_resource(_device, canvas_format, D3D12_RESOURCE_DIMENSION_TEXTURE2D, width, height, 1) ||
+		!depth_stencils.add_empty_resource(_device, DXGI_FORMAT_D24_UNORM_S8_UINT, D3D12_RESOURCE_DIMENSION_TEXTURE2D, width, height, 1, D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_DEPTH_WRITE))
+		return false;
+
+	const size_t clear_target_size = GetRequiredIntermediateSize(canvas.resources[0].get(), 0, 1);
+	if (!canvas.add_empty_resource(_device, DXGI_FORMAT_UNKNOWN, D3D12_RESOURCE_DIMENSION_BUFFER, clear_target_size, 1, 1,
+		D3D12_HEAP_TYPE_UPLOAD, D3D12_RESOURCE_STATE_GENERIC_READ))
+		return false;
+	
+	float* upload_data = nullptr;
+	if (FAILED(canvas.resources[1]->Map(0, nullptr, reinterpret_cast<void**>(&upload_data))))
+	{
+		return false;
+	}
+
+	for (size_t y = 0; y < height; y++)
+	{
+		for (size_t x = 0; x < width * 2; x++)
+			upload_data[x] = 0.0f;
+		upload_data += resource_pitch(width * 8) / sizeof(float);
+	}
+
+	canvas.resources[1]->Unmap(0, nullptr);
+
+	wait_for_sync();
+
+	//render targets
+	_swapchain.targets.clear();
+	if (FAILED(_swapchain.swapchain->ResizeBuffers(3u, 0u, 0u, DXGI_FORMAT_UNKNOWN, DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH)))
+		LOG(WARNING) << "Failed to resize buffers.\n";
+	_swapchain.targets.resize(3);
+	for (size_t i = 0; i < 3; i++)
+		_swapchain.swapchain->GetBuffer(i, IID_PPV_ARGS(&_swapchain.targets[i]));
+
+	_swapchain.current_idx = _swapchain.swapchain->GetCurrentBackBufferIndex();
+	_swapchain.swapchain->GetDesc(&_swapchain.desc);
+
+	_vxl_resource.resources[0] = canvas.resources[0];
+	_upload_buffers.resources[clear_target_buffer_idx] = canvas.resources[1];
+	_depth_stencil_resource.resources[0] = depth_stencils.resources[0];
+	_states.canvas_dimension.vector4_f32[0] = static_cast<FLOAT>(width);
+	_states.canvas_dimension.vector4_f32[1] = static_cast<FLOAT>(height);
+
+	return _renderer_resource_dirty = true;
 }
 
 DirectX::XMVECTOR vpl_renderer::get_light_dir() const

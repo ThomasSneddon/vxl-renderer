@@ -203,10 +203,11 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_CONSOLE;_XM_NO_INTRINSICS_;_CRT_SECURE_NO_WARNINGS;NOMINMAX;VXL_BYTE_TRANSFER;%(PreprocessorDefinitions);NDEBUG</PreprocessorDefinitions>
+      <PreprocessorDefinitions>ImTextureID=ImU64;_CONSOLE;_XM_NO_INTRINSICS_;_CRT_SECURE_NO_WARNINGS;NOMINMAX;VXL_BYTE_TRANSFER;%(PreprocessorDefinitions);NDEBUG</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalIncludeDirectories>.\imgui\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -222,7 +223,12 @@
     <ClCompile Include="filedefinitions.cpp" />
     <ClCompile Include="gdi.cpp" />
     <ClCompile Include="log.cpp" />
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="main.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="mainwindow.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="pal.cpp" />
     <ClCompile Include="vpl.cpp" />
     <ClCompile Include="vxl.cpp" />

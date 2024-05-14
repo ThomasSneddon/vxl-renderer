@@ -26,6 +26,8 @@ public:
 	virtual void purge() final;
 	virtual file_type type() const final;
 
+	bool save(const std::filesystem::path path);
+
 	byte(*data() const)[256];
 
 private:

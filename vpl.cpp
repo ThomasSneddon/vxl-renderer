@@ -64,6 +64,21 @@ file_type vpl::type() const
 	return file_type::vpl;
 }
 
+bool vpl::save(const std::filesystem::path path)
+{
+	if (!is_loaded())
+		return false;
+
+	std::ofstream output(path.string(), std::ios::binary);
+
+	output.write(reinterpret_cast<const char*>(&_header), sizeof _header);
+	output.write(reinterpret_cast<const char*>(_internal_pal.entry()), sizeof(color[256]));
+	output.write(reinterpret_cast<const char*>(_sections.get()), _header.section_count * 256);
+
+	output.close();
+	return true;
+}
+
 byte(*vpl::data() const)[256]
 {
 	return _sections.get();
