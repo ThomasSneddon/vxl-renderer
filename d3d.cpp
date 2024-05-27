@@ -316,7 +316,7 @@ bool vpl_renderer::initialize(HWND output)
 	UINT dxgiFactoryFlags = NULL;
 	bool hardware_processing = false;
 
-//#ifdef _DEBUG
+#ifdef _DEBUG
 	{
 		com_ptr<ID3D12Debug> debug_control;
 		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug_control)))) {
@@ -325,7 +325,7 @@ bool vpl_renderer::initialize(HWND output)
 			dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
 		}
 	}
-//#endif
+#endif
 
 	if (FAILED(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&factory)))) {
 		LOG(ERROR) << "Factory creation.\n";

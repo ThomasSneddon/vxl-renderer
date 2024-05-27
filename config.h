@@ -6,9 +6,9 @@
 class config
 {
 public:
-	using value_type = std::vector<std::string>;//a value consists of multiple splited values
-	using section_type = std::unordered_map<std::string, value_type>;//a section contains multiple key-value pairs
-	using config_type = std::unordered_map<std::string, section_type>;//a config contains multiple sections
+	using value_type = std::vector<std::string>;						//a value consists of multiple splited values
+	using section_type = std::unordered_map<std::string, value_type>;	//a section contains multiple key-value pairs
+	using config_type = std::unordered_map<std::string, section_type>;	//a config contains multiple sections
 
 	config() = default;
 	~config() = default;

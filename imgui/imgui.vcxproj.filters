@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="头文件\imGuIZMO.quat">
+      <UniqueIdentifier>{f8eee087-9d68-431b-8cf6-28ab6c9ed914}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\imGuIZMO.quat">
+      <UniqueIdentifier>{803aab47-52af-4e34-b610-4aca1fc07daf}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="imgui_draw.cpp">
@@ -35,6 +41,9 @@
     </ClCompile>
     <ClCompile Include="backends\imgui_impl_win32.cpp">
       <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imGuIZMO.quat\imGuIZMO.quat\imGuIZMOquat.cpp">
+      <Filter>源文件\imGuIZMO.quat</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -61,6 +70,21 @@
     </ClInclude>
     <ClInclude Include="backends\imgui_impl_dx12.h">
       <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imGuIZMO.quat\imGuIZMO.quat\vgConfig.h">
+      <Filter>头文件\imGuIZMO.quat</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imGuIZMO.quat\imGuIZMO.quat\vGizmo.h">
+      <Filter>头文件\imGuIZMO.quat</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imGuIZMO.quat\imGuIZMO.quat\vGizmoMath.h">
+      <Filter>头文件\imGuIZMO.quat</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imGuIZMO.quat\imGuIZMO.quat\vgMath.h">
+      <Filter>头文件\imGuIZMO.quat</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imGuIZMO.quat\imGuIZMO.quat\imGuIZMOquat.h">
+      <Filter>头文件\imGuIZMO.quat</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

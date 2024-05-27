@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\imGuIZMO.quat\imGuIZMO.quat\imGuIZMOquat.cpp" />
     <ClCompile Include="backends\imgui_impl_dx12.cpp" />
     <ClCompile Include="backends\imgui_impl_win32.cpp" />
     <ClCompile Include="imgui.cpp" />
@@ -28,6 +29,11 @@
     <ClCompile Include="imgui_widgets.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\imGuIZMO.quat\imGuIZMO.quat\imGuIZMOquat.h" />
+    <ClInclude Include="..\imGuIZMO.quat\imGuIZMO.quat\vgConfig.h" />
+    <ClInclude Include="..\imGuIZMO.quat\imGuIZMO.quat\vGizmo.h" />
+    <ClInclude Include="..\imGuIZMO.quat\imGuIZMO.quat\vGizmoMath.h" />
+    <ClInclude Include="..\imGuIZMO.quat\imGuIZMO.quat\vgMath.h" />
     <ClInclude Include="backends\imgui_impl_dx12.h" />
     <ClInclude Include="backends\imgui_impl_win32.h" />
     <ClInclude Include="imconfig.h" />
@@ -160,7 +166,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>.\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir);$(MSBuildProjectDirectory)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>
