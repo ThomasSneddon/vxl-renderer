@@ -26,6 +26,7 @@ public:
 
 	std::vector<int> value_as_int(const std::string& section, const std::string& key);
 	std::vector<bool> value_as_bool(const std::string& section, const std::string& key, bool def);
+	std::vector<double> value_as_double(const std::string& section, const std::string& key);
 	std::vector<std::string> value_as_strings(const std::string& section, const std::string& key);
 
 	int read_int(const std::string& section, const std::string& key, int def);

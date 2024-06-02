@@ -32,7 +32,12 @@ struct colorset_desc
 	std::string name = "Default";
 	size_t start = 1, end = 255;
 	bool self_restricted = false;
+	std::vector<bool> color_selection = std::vector<bool>(256u, true);
 	float ambient = 0.6f, diffuse = 0.8f, specular = 1.2f;
+
+	colorset_desc() {
+		color_selection[0] = false;
+	}
 
 	void parse_ini(const std::string& keyname, const config::value_type& values)
 	{
@@ -40,14 +45,14 @@ struct colorset_desc
 		size_t remained_paras = values.size();
 
 		//start
-		if (remained_paras > 0) {
+		if (remained_paras > 0u) {
 			start = atoi(values[0].c_str());
 			start = std::clamp(start, (size_t)1u, (size_t)255u);
 			remained_paras--;
 		}
 
 		//end
-		if (remained_paras > 0) {
+		if (remained_paras > 0u) {
 			end = atoi(values[1].c_str());
 			end = std::clamp(end, (size_t)1u, (size_t)255u);
 			remained_paras--;
@@ -57,29 +62,51 @@ struct colorset_desc
 			std::swap(end, start);
 
 		//self restricted
-		if (remained_paras > 0) {
+		if (remained_paras > 0u) {
+			std::fill_n(color_selection.begin(), color_selection.size(), false);
+
 			char first = toupper(values[2][0]);
-			self_restricted = first == 'Y' || first == '1' || first == 'T';
+			if (first == 'Y' || first == '1' || first == 'T')
+				std::fill_n(color_selection.begin() + start, end - start + 1u, true);
+			else
+				std::fill_n(color_selection.begin() + 1u, 255u, true);
+
 			remained_paras--;
 		}
 
 		//ambient
-		if (remained_paras > 0) {
+		if (remained_paras > 0u) {
 			ambient = atof(values[3].c_str());
 			remained_paras--;
 		}
 
 		//diffuse
-		if (remained_paras > 0) {
+		if (remained_paras > 0u) {
 			diffuse = atof(values[4].c_str());
 			remained_paras--;
 		}
 
 		//specular
-		if (remained_paras > 0) {
+		if (remained_paras > 0u) {
 			specular = atof(values[5].c_str());
-			//remained_paras--;
+			remained_paras--;
 		}
+
+		//color selection
+		size_t starting_idx = 6u, para_idx = 0u;
+		if (remained_paras > 0u) {
+			std::fill_n(color_selection.begin(), color_selection.size(), false);
+		}
+
+		while (remained_paras > 0u) {
+			const auto& value = values[starting_idx + para_idx];
+			if (value != "0")
+				color_selection[para_idx] = true;
+
+			remained_paras--;
+			para_idx++;
+		}
+		color_selection[0] = false;
 	}
 };
 namespace mainproc
@@ -128,18 +155,21 @@ namespace ui_states
 	float scale = 1.0f;
 
 	//DirectX::XMVECTOR light_direction = { 0.2013022f,-0.9101138f,-0.3621709f,0.0f };
-	vgm::Vec3 light_direction = { 0.2013022f,-0.9101138f,-0.3621709f };
+	vgm::Vec3 light_direction_config = { 0.2013022f,-0.9101138f,-0.3621709f };
+	vgm::Vec3 light_direction = light_direction_config;
+	bool direction_panel_locked = false;
 	//float ambient_diffuse_specular[3] = { 0.6f,0.8f,1.2f };
 	//float ambient = 0.6f, diffuse = 0.8f, specular = 1.2f;
 	bool reset_checked = false;
 
 	std::vector<colorset_desc> color_sets = { colorset_desc() };
 	size_t color_set_idx = 0u;
+	bool show_colorsel_panel = false;
 	
 	void reset_values()
 	{
 		rotation_theta = rotation_phi = turret_rotation = xy_angle = z_angle = 0.0f;
-		light_direction = { 0.2013022f,-0.9101138f,-0.3621709f };
+		light_direction = light_direction_config;// { 0.2013022f, -0.9101138f, -0.3621709f };
 		scale = 1.0f;
 	}
 }
@@ -446,10 +476,13 @@ void update_vpl()
 			double nearest_dis = 3.0 * 255.0 * 255.0;
 			size_t nearest_i = 1u;
 
-			size_t findstart = colorset.self_restricted ? colorset.start : 1u;
-			size_t findend = colorset.self_restricted ? colorset.end : 255u;
+			size_t findstart = /*colorset.self_restricted ? colorset.start : */1u;
+			size_t findend = /*colorset.self_restricted ? colorset.end : */255u;
 			for (size_t f = findstart; f < findend; f++)
 			{
+				if (!colorset.color_selection[f])
+					continue;
+
 				double dis = color_sqdistance(pal.entry()[f], target_color);
 				if (dis < nearest_dis)
 				{
@@ -478,7 +511,11 @@ void save_vpl_setting_cache()
 	for (const auto& set : ui_states::color_sets)
 	{
 		swprintf_s(printbuffer, L"%hs", set.name.c_str());
-		const auto values = std::format(L"{},{},{},{},{},{}", set.start, set.end, set.self_restricted, set.ambient, set.diffuse, set.specular);
+		auto values = std::format(L"{},{},{},{},{},{}", set.start, set.end, set.self_restricted, set.ambient, set.diffuse, set.specular);
+		for (const auto sel : set.color_selection) 
+		{
+			values += L',' + std::to_wstring(sel);
+		}
 
 		WritePrivateProfileStringW(mainsec_file.c_str(), printbuffer, values.c_str(), path.c_str());
 	}
@@ -514,6 +551,7 @@ void load_vpl_setting_cache()
 				set.ambient = cache_desc.ambient;
 				set.diffuse = cache_desc.diffuse;
 				set.specular = cache_desc.specular;
+				set.color_selection = cache_desc.color_selection;
 			}
 
 			ui_states::color_set_idx = i;
@@ -553,6 +591,13 @@ bool load_settings()
 	shot::generate_shadow = assets::ini.read_bool(settings, "GenerateShadow", shot::generate_shadow);
 	shot::generate_integrated_shadow = assets::ini.read_bool(settings, "IntegratedShadow", shot::generate_integrated_shadow);
 
+	const auto def_light_data = assets::ini.value_as_double(settings, "DefaultLightDir");
+	if (def_light_data.size() >= 3u) 
+	{
+		ui_states::light_direction_config = { (float)def_light_data[0],(float)def_light_data[1],(float)def_light_data[2] };
+		ui_states::light_direction = ui_states::light_direction_config;
+	}
+
 	//colorsets
 	const auto& colorset_sec = config.section(colorsets);
 	for (const auto& keypairs : colorset_sec)
@@ -565,6 +610,7 @@ bool load_settings()
 	}
 
 	load_vpl_setting_cache();
+	return true;
 }
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -653,6 +699,115 @@ LRESULT __stdcall winproc(HWND window, UINT msg, WPARAM wpara, LPARAM lpara)
 	return DefWindowProc(window, msg, wpara, lpara);
 }
 
+bool SelectionRect(ImVec2& start_pos, ImVec2& end_pos, ImGuiMouseButton mouse_button = ImGuiMouseButton_Left)
+{
+	//if (!ImGui::GetIO().WantCaptureMouse)
+	//	return false;
+
+	if (ImGui::IsMouseClicked(mouse_button))
+		start_pos = ImGui::GetMousePos();
+
+	if (ImGui::IsMouseDown(mouse_button))
+	{
+		end_pos = ImGui::GetMousePos();
+		ImDrawList* draw_list = ImGui::GetForegroundDrawList(); //ImGui::GetWindowDrawList();
+
+		draw_list->AddRect(start_pos, end_pos, ImGui::GetColorU32(IM_COL32(0, 130, 216, 255)));   // Border
+		draw_list->AddRectFilled(start_pos, end_pos, ImGui::GetColorU32(IM_COL32(0, 130, 216, 50)));    // Background
+	}
+
+	return ImGui::IsMouseReleased(mouse_button);
+}
+
+void PaletteSelectionPanel(const std::string& label, const palette& pal, std::vector<bool>& idx_status) 
+{
+	//
+	static constexpr size_t grid_width = 16u, grid_height = 8u, expansion_dis = 0u;
+	static constexpr ImVec2 child_size = ImVec2(grid_width * 8u + expansion_dis * 2u, grid_height * 32u + expansion_dis * 2u);
+	static constexpr ImVec2 button_size = ImVec2(grid_width, grid_height);
+
+	if (idx_status.size() != 256u)
+		return;
+
+	static bool clearmode = false;
+	ImGui::Checkbox("Clear Mode", &clearmode);
+
+	const auto& style = ImGui::GetStyle();
+	const float titlebar_height = style.FramePadding.x * 2.0f + ImGui::GetFontSize() - 2.0f;
+	ImGui::SetNextWindowBgAlpha(0.5f);
+	ImGui::SetNextWindowSize(child_size + ImVec2(0.0f, titlebar_height));
+
+	ImGui::Begin(label.c_str(), nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar);
+	auto draw_list = ImGui::GetWindowDrawList();
+
+	ImGui::SetCursorPos({ 0.0f,0.0f });
+	const auto lefttop = ImGui::GetCursorScreenPos() + ImVec2(0.0f, titlebar_height);
+	const auto colors = pal.entry();
+
+	static ImVec2 start = {}, end = {};
+
+	if (SelectionRect(start, end) && start != end && ui_states::color_set_idx != 0u) // select and mouse released 
+	{
+		ImVec2 lt = { std::min(start.x,end.x),std::min(start.y,end.y) };
+		ImVec2 rb = { std::max(start.x,end.x),std::max(start.y,end.y) };
+
+		lt -= lefttop;
+		rb -= lefttop;
+
+		lt.x = std::clamp(lt.x, 0.0f, child_size.x);
+		lt.y = std::clamp(lt.y, 0.0f, child_size.y);
+		rb.x = std::clamp(rb.x, 0.0f, child_size.x);
+		rb.y = std::clamp(rb.y, 0.0f, child_size.y);
+
+		size_t start_col = static_cast<size_t>(std::clamp(lt.x / grid_width, 0.0f, 7.5f)),
+			end_col = static_cast<size_t>(std::clamp(rb.x / grid_width, 0.0f, 7.5f)),
+			start_row = static_cast<size_t>(std::clamp(lt.y / grid_height, 0.0f, 31.5f)),
+			end_row = static_cast<size_t>(std::clamp(rb.y / grid_height, 0.0f, 31.5f));
+
+		for (size_t c = start_col; c <= end_col; c++)
+		{
+			for (size_t r = start_row; r <= end_row; r++)
+			{
+				size_t i = c * 32u + r;
+				idx_status[i] = !clearmode;
+			}
+		}
+
+		idx_status[0] = false;
+	}
+
+	for (size_t i = 0u; i < 256u; i++)
+	{
+		const auto& palcol = colors[i];
+		const ImColor col = ImColor((int)palcol.r, palcol.g, palcol.b);
+		const size_t column = i / 32u;
+		const size_t row = i - column * 32u;
+
+		const ImVec2 pos = lefttop + ImVec2(column * grid_width + expansion_dis, row * grid_height + expansion_dis);
+		draw_list->AddRectFilled(pos, pos + button_size, col);
+
+		ImGui::SetCursorScreenPos(pos);
+		
+		//Default set is not editable, but button should be used
+		if (ImGui::InvisibleButton(std::format("Color##{}", i).c_str(), button_size) && ui_states::color_set_idx != 0u)
+		{
+			//sha bi std::vector<bool>
+			idx_status[i] = !idx_status[i];
+		}
+
+		if (idx_status[i])
+		{
+			ImColor tickcol = ImColor(255 - palcol.r, 255 - palcol.g, 255 - palcol.b);
+			const ImVec2 lb = pos + ImVec2(0.0f, grid_height), rt = pos + ImVec2(grid_width, 0.0f);
+			
+			draw_list->AddLine(pos, pos + button_size, tickcol);
+			draw_list->AddLine(lb, rt, tickcol);
+		}
+	}
+
+	ImGui::End();
+}
+
 int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline, int cmdshow)
 {
 #if _DEBUG
@@ -666,6 +821,7 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 	assets::pal.load((current_dir / "unittem.pal").string());
 	assets::ini.load((current_dir / "settings.ini").string());
 	std::string gui_config = (get_exe_path() / "imgui.ini").string();
+	std::string gui_log = (get_exe_path() / "imgui.log").string();
 	//std::filesystem::path gui_log = get_exe_path() / "imgui_log.ini";
 
 	//generate_normal_table_codes("D:\\Yuris Revenge\\gamemd.exe");
@@ -735,7 +891,8 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 		auto& io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 		io.IniFilename = gui_config.c_str();
-
+		io.LogFilename = gui_log.c_str();
+		
 		ImGui::StyleColorsDark();
 		if (ImGui_ImplWin32_Init(mainwin) && mainproc::renderer.initialize(mainwin))
 		{
@@ -773,6 +930,7 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 				//ImGui::SetNextWindowSize({ 350.0f,350.0f });
 				{
 					ImGui::Begin("Control Panel");                          // Create a window called "Hello, world!" and append into it.
+					//ImGui::LogToFile();
 
 					ImGui::SliderFloat("Rotation XOY", &ui_states::rotation_theta, 0.0f, DirectX::g_XMTwoPi.f[0]);
 					ImGui::SliderFloat("Rotation Z", &ui_states::rotation_phi, 0.0f, DirectX::g_XMTwoPi.f[0]);
@@ -818,10 +976,14 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 						ui_states::reset_checked = true;
 					}
 
-					vgm::Vec3 direction = ui_states::light_direction;
-
 					static const auto rotation = DirectX::XMMatrixRotationZ(-0.25f * vgm::pi()) * DirectX::XMMatrixRotationX(vgm::pi() / 6.0f);
 					static const auto rotationi = DirectX::XMMatrixTranspose(rotation);
+
+					ImGui::Checkbox("Dir panel locked", &ui_states::direction_panel_locked);
+					if (ui_states::direction_panel_locked)
+						ImGui::BeginDisabled();
+
+					vgm::Vec3 direction = ui_states::light_direction;
 					DirectX::XMVECTOR dir = { direction.x,direction.y,direction.z,0.0f };
 					dir = DirectX::XMVector3TransformNormal(dir, rotation);
 
@@ -835,8 +997,13 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 					dir = { direction.x,direction.y,direction.z,0.0f };
 					dir = DirectX::XMVector3TransformNormal(dir, rotationi);
 					direction = { dir.vector4_f32[0],dir.vector4_f32[1],dir.vector4_f32[2] };
-					ImGui::InputFloat3("Light Direction", (float*)direction);
-					ui_states::light_direction = direction;
+
+					if (!ui_states::direction_panel_locked)
+						ui_states::light_direction = direction;
+					else
+						ImGui::EndDisabled();
+
+					ImGui::InputFloat3("Light Direction", (float*)ui_states::light_direction);
 
 					ImGui::InputFloat("Turret Offset", &ui_states::turret_offset);
 					ImGui::InputFloat("Model Scale", &ui_states::scale);
@@ -848,6 +1015,7 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 						names.push_back(set.name.c_str());
 
 					ImGui::Combo("Color Set", reinterpret_cast<int*>(&ui_states::color_set_idx), names.data(), names.size());
+
 
 					auto& colorset = ui_states::color_sets[ui_states::color_set_idx];
 					ImGui::SliderFloat("Ambient", &colorset.ambient, 0.0f, 5.0f);
@@ -866,6 +1034,13 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 						assets::vpl.save(select_folder());
 					}
 
+					ImGui::SameLine();
+					ImGui::Checkbox("Show Color Selection Panel", &ui_states::show_colorsel_panel);
+
+					if(ui_states::show_colorsel_panel)
+						PaletteSelectionPanel("Select Color", assets::pal, colorset.color_selection);
+
+					//ImGui::LogFinish();
 					ImGui::End();
 				}
 
@@ -911,7 +1086,6 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 			mainproc::renderer.clear_renderer();
 			ImGui::DestroyContext();
 		}
-
 
 		DestroyWindow(mainwin);
 		mainproc::mainwin = NULL;

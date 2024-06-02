@@ -121,6 +121,20 @@ std::vector<bool> config::value_as_bool(const std::string& section, const std::s
     return ret;
 }
 
+std::vector<double> config::value_as_double(const std::string& section, const std::string& key)
+{
+    std::vector<double> ret;
+    value_type values = value(section, key);
+
+    ret.resize(values.size());
+    for (size_t i = 0; i < ret.size(); i++)
+    {
+        ret[i] = atof(values[i].c_str());
+    }
+
+    return ret;
+}
+
 std::vector<std::string> config::value_as_strings(const std::string& section, const std::string& key)
 {
     return value(section, key);
