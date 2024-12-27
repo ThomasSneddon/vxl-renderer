@@ -165,6 +165,8 @@ namespace ui_states
 	std::vector<colorset_desc> color_sets = { colorset_desc() };
 	size_t color_set_idx = 0u;
 	bool show_colorsel_panel = false;
+
+	float extra_light = 0.2f;
 	
 	void reset_values()
 	{
@@ -435,7 +437,16 @@ std::filesystem::path select_folder()
 	return result;
 }
 
-
+/*
+double ColourDistance(RGB e1, RGB e2)
+{
+  long rmean = ( (long)e1.r + (long)e2.r ) / 2;
+  long r = (long)e1.r - (long)e2.r;
+  long g = (long)e1.g - (long)e2.g;
+  long b = (long)e1.b - (long)e2.b;
+  return sqrt((((512+rmean)*r*r)>>8) + 4*g*g + (((767-rmean)*b*b)>>8));
+}
+*/
 void update_vpl()
 {
 	auto& vpl = assets::vpl;
@@ -452,12 +463,13 @@ void update_vpl()
 		return f < 1.0 ? (ambient + f * diffuse) : (ambient + diffuse + (f - 1.0) * (diffuse + spec));
 	};
 
-	auto color_sqdistance = [](const color& color1, const color& color2)->double {
-		double disr = double(color1.r) - double(color2.r);
-		double disg = double(color1.g) - double(color2.g);
-		double disb = double(color1.b) - double(color2.b);
-
-		return disr * disr + disg * disg + disb * disb;
+	auto color_sqdistance = [](const color& color1, const color& color2) {
+		int dr = (int)color1.r - (int)color2.r;
+		int dg = (int)color1.g - (int)color2.g;
+		int db = (int)color1.b - (int)color2.b;
+		
+		int rmean = ((int)color1.r + (int)color2.r) / 2;
+		return (((512 + rmean) * dr * dr) >> 8) + 4 * dg * dg + (((767 - rmean) * db * db) >> 8);
 	};
 
 	for (size_t section_i = 0u; section_i < 32u; section_i++)
@@ -478,7 +490,7 @@ void update_vpl()
 
 			size_t findstart = /*colorset.self_restricted ? colorset.start : */1u;
 			size_t findend = /*colorset.self_restricted ? colorset.end : */255u;
-			for (size_t f = findstart; f < findend; f++)
+			for (size_t f = findstart; f <= findend; f++)
 			{
 				if (!colorset.color_selection[f])
 					continue;
@@ -1005,6 +1017,7 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 
 					ImGui::InputFloat3("Light Direction", (float*)ui_states::light_direction);
 
+					ImGui::InputFloat("Extra light", &ui_states::extra_light);
 					ImGui::InputFloat("Turret Offset", &ui_states::turret_offset);
 					ImGui::InputFloat("Model Scale", &ui_states::scale);
 					
@@ -1015,7 +1028,6 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 						names.push_back(set.name.c_str());
 
 					ImGui::Combo("Color Set", reinterpret_cast<int*>(&ui_states::color_set_idx), names.data(), names.size());
-
 
 					auto& colorset = ui_states::color_sets[ui_states::color_set_idx];
 					ImGui::SliderFloat("Ambient", &colorset.ambient, 0.0f, 5.0f);
@@ -1052,6 +1064,8 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 					ui_states::reset_checked = false;
 				}
 
+				mainproc::renderer.set_extra_light(ui_states::extra_light);
+
 				const auto& direction = ui_states::light_direction;
 				const float scale = ui_states::scale;
 				mainproc::renderer.set_scale_factor({ scale,scale,scale,scale });
@@ -1060,6 +1074,7 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 					rotation_z = DirectX::XMMatrixRotationZ(-ui_states::z_angle - ui_states::rotation_theta);
 				mainproc::renderer.set_world(rotation_z * rotation_y * rotation_xy);
 				mainproc::renderer.set_light_dir({ direction.x,direction.y,direction.z,0.0f });
+
 
 				size_t& current_frame = ui_states::current_frame;
 				const float reload_Z = -ui_states::turret_rotation;

@@ -1356,9 +1356,9 @@ bool vpl_renderer::render_loaded_vxl()
 		translation_to_center = DirectX::XMMatrixTranslationFromVector(data.vxl_minbound);
 		scale = DirectX::XMMatrixScalingFromVector(scale_vec);
 		offset = DirectX::XMMatrixTranslation(data.vxl_maxbound.vector4_f32[3], 0.0f, 0.0f);
-		/*base.m[3][0] *= scale_vec.vector4_f32[0] * data.vxl_dimension.vector4_f32[3];
+		base.m[3][0] *= scale_vec.vector4_f32[0] * data.vxl_dimension.vector4_f32[3];
 		base.m[3][1] *= scale_vec.vector4_f32[1] * data.vxl_dimension.vector4_f32[3];
-		base.m[3][2] *= scale_vec.vector4_f32[2] * data.vxl_dimension.vector4_f32[3];*/
+		base.m[3][2] *= scale_vec.vector4_f32[2] * data.vxl_dimension.vector4_f32[3];
 		data.vxl_transformation = translation_to_center * scale * base * offset * _states.world;
 		data.remap_color = _states.remap_color;
 		data.light_direction = _states.light_direction;
@@ -1669,6 +1669,11 @@ void vpl_renderer::set_remap(const color& color)
 	_states.remap_color = { static_cast<float>(color.r),static_cast<float>(color.g), static_cast<float>(color.b),1.0f };
 }
 
+void vpl_renderer::set_extra_light(const float extra)
+{
+	_states.canvas_dimension_extralight.vector4_f32[2] = extra;
+}
+
 bool vpl_renderer::hardware_processing() const
 {
 	return _hardware_processing;
@@ -1676,12 +1681,12 @@ bool vpl_renderer::hardware_processing() const
 
 size_t vpl_renderer::width() const
 {
-	return static_cast<size_t>(_states.canvas_dimension.vector4_f32[0]);
+	return static_cast<size_t>(_states.canvas_dimension_extralight.vector4_f32[0]);
 }
 
 size_t vpl_renderer::height() const
 {
-	return static_cast<size_t>(_states.canvas_dimension.vector4_f32[1]);
+	return static_cast<size_t>(_states.canvas_dimension_extralight.vector4_f32[1]);
 }
 
 bool vpl_renderer::resize_buffers()
@@ -1743,8 +1748,8 @@ bool vpl_renderer::resize_buffers()
 	_vxl_resource.resources[0] = canvas.resources[0];
 	_upload_buffers.resources[clear_target_buffer_idx] = canvas.resources[1];
 	_depth_stencil_resource.resources[0] = depth_stencils.resources[0];
-	_states.canvas_dimension.vector4_f32[0] = static_cast<FLOAT>(width);
-	_states.canvas_dimension.vector4_f32[1] = static_cast<FLOAT>(height);
+	_states.canvas_dimension_extralight.vector4_f32[0] = static_cast<FLOAT>(width);
+	_states.canvas_dimension_extralight.vector4_f32[1] = static_cast<FLOAT>(height);
 
 	return _renderer_resource_dirty = true;
 }

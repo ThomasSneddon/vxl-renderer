@@ -138,7 +138,7 @@ struct renderer_state_data
 	DirectX::XMVECTOR remap_color{ 252.0f,0.0f,0.0f,1.0f };
 	DirectX::XMVECTOR scale{ 1.0f,1.0f,1.0f,1.0f };
 	DirectX::XMVECTOR bgcolor{ 0.0f,0.0f,1.0f,0.0f };
-	DirectX::XMVECTOR canvas_dimension{ 256.0f,256.0f,0.0f,0.0f };
+	DirectX::XMVECTOR canvas_dimension_extralight{ 256.0f,256.0f,0.2f,0.0f };
 };
 
 struct vxl_buffer_decl
@@ -228,6 +228,7 @@ public:
 	void set_world(const DirectX::XMMATRIX& world);
 	void set_bg_color(const DirectX::XMVECTOR& color);
 	void set_remap(const struct color& color);
+	void set_extra_light(const float extra);
 	bool hardware_processing()const;
 	size_t width() const;
 	size_t height() const;

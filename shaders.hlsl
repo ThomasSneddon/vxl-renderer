@@ -37,7 +37,7 @@ cbuffer state_data : register(b7)
     float4 remap;
     float4 scale_factor;
     float4 bgcolor;
-    float2 canvas_dimension;
+    float3 canvas_dimension_extralight;
 }
 
 float3 vxl_projection(float3 model_pos)
@@ -49,8 +49,8 @@ float3 vxl_projection(float3 model_pos)
     float3 result = 0.0f.xxx;
     
     model_pos.xy *= float2(1.0f, -1.0f);
-    result.x = canvas_dimension.x / 2.0 + (model_pos.x - model_pos.y) / sqrt(2.0);
-    result.y = canvas_dimension.y / 2.0 + (model_pos.x + model_pos.y) / sqrt(8.0) - model_pos.z * sqrt(3.0) / 2.0;
+    result.x = canvas_dimension_extralight.x / 2.0 + (model_pos.x - model_pos.y) / sqrt(2.0);
+    result.y = canvas_dimension_extralight.y / 2.0 + (model_pos.x + model_pos.y) / sqrt(8.0) - model_pos.z * sqrt(3.0) / 2.0;
     result.z = sqrt(3.0) / 2.0 / f * (4000.0 * sqrt(2.0) / 3.0 - (model_pos.x + model_pos.y) / sqrt(2.0) - model_pos.z / sqrt(3.0));
     
     return result;
@@ -155,7 +155,7 @@ vs_output vmain(float3 pos : POSITION, float2 uv : TEXCOORD)
 
 float4 pmain(vs_output input) : SV_Target
 {
-    uint2 pix_coord = input.uv * canvas_dimension;
+    uint2 pix_coord = input.uv * canvas_dimension_extralight.xy;
     uint color_idx = render_target[pix_coord].x;
     uint color_offset = color_idx * 3;
     float3 color = float3(pal_data[color_offset], pal_data[color_offset + 1], pal_data[color_offset + 2]);
@@ -166,7 +166,7 @@ float4 pmain(vs_output input) : SV_Target
         color.r = color.r;
         color.g = color.g * sin(i * pi / 67.5f + pi / 3.6f);
         color.b = color.b * cos(i * 7.0f * pi / 270.0f + pi / 9.0f);
-        color.rgb = HSVtoRGB(color.rgb);
+        color.rgb = HSVtoRGB(color.rgb) * (canvas_dimension_extralight.z + 1.0f);
         return float4(color, 1.0f);
     }
     
@@ -232,14 +232,14 @@ box_vert_output box_vmain(float4 position : POSITION, uint instance_id : SV_Inst
         real_color = float4(color / 255.0f, 1.0f);
     }
     
-    proj_voxel_pos.xy /= canvas_dimension / 2.0f;
+    proj_voxel_pos.xy /= canvas_dimension_extralight.xy / 2.0f;
     proj_voxel_pos.xy -= 1.0f.xx;
     proj_voxel_pos.y *= -1.0f;
     proj_voxel_pos.z += 0.5f;
     box_vert_output output;
     
     output.position = float4(proj_voxel_pos, 1.0f);
-    output.color = real_color;
+    output.color = real_color * (canvas_dimension_extralight.z + 1.0f);
     
     return output;
 }
