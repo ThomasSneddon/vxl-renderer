@@ -41,6 +41,8 @@ struct d3d12_render_target_set
 	com_ptr<ID3D12Device> ref_device;
 	std::vector<com_ptr<ID3D12Resource>> targets;
 	com_ptr<ID3D12DescriptorHeap> rtv_table;
+	com_ptr<ID3D12Resource> depth;
+	com_ptr<ID3D12DescriptorHeap> ds_heap;
 
 	void discard();
 	bool valid() const;
@@ -218,6 +220,7 @@ public:
 	bool vxl_resource_initiated() const;
 	bool bind_resource_table(const int resource_idx);
 	bool render_loaded_vxl();
+	bool render_temp_screenshot(const size_t width, const size_t height, std::vector<byte>& output);
 	
 	bool render_gui(const bool clear_target = false);
 	bool present_resource_initiated() const;
@@ -232,7 +235,7 @@ public:
 	bool hardware_processing()const;
 	size_t width() const;
 	size_t height() const;
-	bool resize_buffers();
+	bool resize_buffers(int width = -1, int height = -1);
 
 	DirectX::XMVECTOR get_light_dir() const;
 	DirectX::XMMATRIX get_world() const;
@@ -243,6 +246,8 @@ public:
 	std::vector<byte> render_target_data();
 
 private:
+	std::vector<byte> download_buffer(const D3D12_RESOURCE_STATES prev_state, com_ptr<ID3D12Resource> target, const DXGI_FORMAT download_fmt, const size_t ele_size);
+	
 	com_ptr<ID3D12Device> _device;
 	com_ptr<ID3D12CommandQueue> _general_queue;
 	com_ptr<ID3D12PipelineState> _pso, _render_pso,_box_pso;

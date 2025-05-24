@@ -194,7 +194,7 @@ void screen_shot(const std::string& filename, const std::string& path)
 		return;
 
 	size_t directions = shot::directions;
-	float starting_angle = -0.75f * DirectX::g_XMPi.f[0];
+	float starting_angle = -1.25f * DirectX::g_XMPi.f[0];
 	float angle_step = DirectX::g_XMTwoPi.f[0] / directions;
 
 	const size_t body_frames = assets::hva.frame_count();
@@ -219,11 +219,14 @@ void screen_shot(const std::string& filename, const std::string& path)
 
 	const float reload_Z = static_cast<float>(ui_states::turret_rotation) * DirectX::g_XMTwoPi.f[0] / 100.0f;
 	const hva* hvas[] = { &assets::hva,&assets::tur_hva,&assets::barl_hva };
+	auto shadow_matrix = DirectX::XMMatrixScaling(1.0f, 1.0f, 0.0f);
 	size_t frame_per_direction = std::max(max_ab, static_cast<size_t>(1u)) * std::max(barrel_frames, static_cast<size_t>(1u)) / min_bc;
 	for (size_t current_dir = 0u, current_file_idx = 0u; current_dir < directions; current_dir++)
 	{
 		float current_angle = starting_angle + current_dir * angle_step;
 		DirectX::XMMATRIX world = DirectX::XMMatrixRotationZ(current_angle);
+		auto temp_world = renderer.get_world();
+
 		for (size_t frame_idx = 0u; frame_idx < frame_per_direction; frame_idx++)
 		{
 			const size_t frames[] = { frame_idx,frame_idx,frame_idx };
@@ -235,12 +238,91 @@ void screen_shot(const std::string& filename, const std::string& path)
 			renderer.clear_vxl_canvas();
 			renderer.render_loaded_vxl();
 			auto front_buffer = renderer.render_target_data();
-			if (!front_buffer.empty())
+			if (!shot::generate_integrated_shadow && !front_buffer.empty())
 			{
-				target.replace_filename(filename + " " + std::to_string(current_file_idx++));
+				target.replace_filename(filename + " " + std::to_string(current_file_idx));
 				target.replace_extension(".PNG");
-				stbi_write_png(target.string().c_str(), 256, 256, 4, front_buffer.data(), 0);
+				stbi_write_png(target.string().c_str(), renderer.width(), renderer.height(), 4, front_buffer.data(), 0);
 			}
+
+			if (shot::generate_shadow)
+			{
+				auto bg_color = renderer.get_bg_color();
+				renderer.set_bg_color({ 0.0f,0.0f,1.0f,0.0f });
+				renderer.clear_vxl_canvas();
+				renderer.set_world(DirectX::XMMatrixScaling(1.0f, 1.0f, 0.0f) * temp_world);
+				renderer.render_loaded_vxl();
+				auto shadow_buffer = renderer.render_target_data();
+				if (!shadow_buffer.empty())
+				{
+					RGBQUAD bg = {};
+					bg.rgbRed = bg_color.vector4_f32[2] * 255.0f;
+					bg.rgbGreen = bg_color.vector4_f32[1] * 255.0f;
+					bg.rgbBlue = bg_color.vector4_f32[0] * 255.0f;
+					bg.rgbReserved = bg_color.vector4_f32[3] * 255.0f;
+					if (shot::generate_integrated_shadow)
+					{
+						renderer.clear_vxl_canvas();
+						renderer.set_world(temp_world);
+						renderer.render_loaded_vxl();
+						front_buffer = renderer.render_target_data();
+						if (!front_buffer.empty())
+						{
+							for (size_t y = 0; y < renderer.height(); y++)
+							{
+								for (size_t x = 0; x < renderer.width(); x++)
+								{
+									auto& shadowc = *reinterpret_cast<RGBQUAD*>(&shadow_buffer[4 * (y * renderer.width() + x)]);
+									auto& color = *reinterpret_cast<RGBQUAD*>(&front_buffer[4 * (y * renderer.width() + x)]);
+									if (shadowc.rgbReserved && !color.rgbReserved)
+									{
+										color.rgbRed = 0 * 127 / 255 + bg.rgbRed * (255 - 127) / 255;
+										color.rgbGreen = 0 * 127 / 255 + bg.rgbGreen * (255 - 127) / 255;
+										color.rgbBlue = 0 * 127 / 255 + bg.rgbBlue * (255 - 127) / 255;
+										color.rgbReserved = 127 + bg.rgbReserved * (255 - 127) / 255;
+									}
+									else if(!color.rgbReserved)
+									{
+										color = bg;
+									}
+								}
+							}
+							target.replace_filename(filename + " " + std::to_string(current_file_idx));
+							target.replace_extension(".PNG");
+							stbi_write_png(target.string().c_str(), renderer.width(), renderer.height(), 4, front_buffer.data(), 0);
+						}
+					}
+					else
+					{
+						for (size_t y = 0; y < renderer.height(); y++)
+						{
+							for (size_t x = 0; x < renderer.width(); x++)
+							{
+								auto& shadowc = *reinterpret_cast<RGBQUAD*>(&shadow_buffer[4 * (y * renderer.width() + x)]);
+								if (shadowc.rgbReserved)
+								{
+									shadowc.rgbRed = 0 * 127 / 255 + bg.rgbRed * (255 - 127) / 255;
+									shadowc.rgbGreen = 0 * 127 / 255 + bg.rgbGreen * (255 - 127) / 255;
+									shadowc.rgbBlue = 0 * 127 / 255 + bg.rgbBlue * (255 - 127) / 255;
+									shadowc.rgbReserved = 127 + bg.rgbReserved * (255 - 127) / 255;
+								}
+								else
+								{
+									shadowc = bg;
+								}
+							}
+						}
+						target.replace_filename(filename + " " + std::to_string(frame_per_direction * directions + current_file_idx));
+						target.replace_extension(".PNG");
+						stbi_write_png(target.string().c_str(), renderer.width(), renderer.height(), 4, shadow_buffer.data(), 0);
+					}
+				}
+
+				renderer.set_bg_color(bg_color);
+				renderer.set_world(temp_world);
+			}
+
+			current_file_idx++;
 		}
 	}
 
@@ -250,14 +332,14 @@ void screen_shot(const std::string& filename, const std::string& path)
 		constexpr const size_t cell_width = 60u;
 		constexpr const size_t cell_height = 30u;
 
-		const size_t bgwidth = 256u + cell_width * shot::celloffsetx * 2u;
-		const size_t bgheight = 256u + cell_height * shot::celloffsety * 2u;
+		const size_t bgwidth = renderer.width() + cell_width * shot::celloffsetx * 2u;
+		const size_t bgheight = renderer.height() + cell_height * shot::celloffsety * 2u;
 		std::unique_ptr<byte> output_buffer(new byte[bgwidth * bgheight * bgchannels]);
 		const size_t outputbuffer_pitch = bgwidth * bgchannels;
 
 		directions = 8u;
-		angle_step = DirectX::g_XMTwoPi.f[0] / directions;
-		starting_angle = DirectX::g_XMNegativePi.f[0]; //lefttop
+		angle_step = -DirectX::g_XMTwoPi.f[0] / directions;
+		starting_angle = DirectX::g_XMPi.f[0]; //lefttop
 
 		auto tempworld = renderer.get_world();
 		auto tempscale = renderer.get_scale_factor();
@@ -274,7 +356,6 @@ void screen_shot(const std::string& filename, const std::string& path)
 		std::vector<std::vector<byte>> render_result_storage;
 		std::vector<std::vector<byte>> shadow_result_storage;
 		auto rotation_matrix = DirectX::XMMatrixIdentity();
-		auto shadow_matrix = DirectX::XMMatrixScaling(1.0f, 1.0f, 0.0f);
 		for (size_t i = 0; i < directions; i++)
 		{
 			rotation_matrix = DirectX::XMMatrixRotationZ(starting_angle + angle_step * i);
@@ -286,7 +367,6 @@ void screen_shot(const std::string& filename, const std::string& path)
 			renderer.clear_vxl_canvas();
 			renderer.render_loaded_vxl();
 			shadow_result_storage.push_back(renderer.render_target_data());
-
 		}
 
 		renderer.set_world(tempworld);
@@ -363,10 +443,10 @@ void screen_shot(const std::string& filename, const std::string& path)
 
 				auto& result = render_result_storage[dir];
 				auto& shadow = shadow_result_storage[dir];
-				const size_t src_pitch = 256u * 4u;
-				for (size_t y = 0; y < 256u; y++)
+				const size_t src_pitch = renderer.width() * 4u;
+				for (size_t y = 0; y < renderer.height(); y++)
 				{
-					for (size_t x = 0; x < 256u; x++)
+					for (size_t x = 0; x < renderer.width(); x++)
 					{
 						size_t src_location = y * src_pitch + x * 4u;
 						size_t dst_location = (start_y + y) * outputbuffer_pitch + (start_x + x) * bgchannels;
@@ -977,9 +1057,14 @@ int __stdcall WinMain(HINSTANCE instance, HINSTANCE prev_instance, LPSTR cmdline
 					}
 
 					ImGui::SameLine();
-					if (ImGui::Button("Screenshot(buxved)"))
+					if (ImGui::Button("Screenshot"))
 					{
-
+						RECT temprect = {}, targetrect = { 0,0,256,256 };
+						GetWindowRect(mainwin, &temprect);
+						AdjustWindowRect(&targetrect, WS_OVERLAPPEDWINDOW, false);
+						MoveWindow(mainwin, 0, 0, targetrect.right - targetrect.left, targetrect.bottom - targetrect.top, false);
+						screen_shot(shot::filename, shot::output_dir);
+						MoveWindow(mainwin, temprect.left, temprect.top, temprect.right - temprect.left, temprect.bottom - temprect.top, true);
 					}
 
 					ImGui::SameLine();
